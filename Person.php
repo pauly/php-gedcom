@@ -2,18 +2,41 @@
 
 class Person {
 
+  public static $_gedcom;
+  public static $_people;
   var $_data;
-  var $_gedcom;
   var $_father;
   var $_mother;
   var $_siblings;
   var $_children;
   var $_spouses;
+  var $_parents = array( );
+  var $_ancestorIDs = null;
 
-  function __construct ( $data = array( ), $gedcom = array( )) {
-    $this->_data = $data;
-    $this->_gedcom = $gedcom;
-    if ( is_string( $data )) $this->_data = $this->_gedcom['INDI'][ $this->_id( $data ) ];
+  function __construct ( $id = null, $gedcom = null ) {
+    if ( $gedcom === null ) $gedcom = self::$_gedcom;
+    if ( ! $id ) {
+      $this->_data = array( );
+      return;
+    }
+    if ( is_array( $id )) $id = self::_id( $id );
+    if ( isset( $gedcom['INDI'][ $id ] )) {
+      $this->_data = $gedcom['INDI'][ $id ];
+      return;
+    }
+  }
+
+  public static function singleton ( $data = null ) {
+    if ( ! isset( self::$_people )) {
+      self::$_people = array( );
+    }
+    $id = self::_id( $data );
+    if ( ! $id ) $id = -1;
+    if ( ! isset( self::$_people[ $id ] )) {
+      $class = __CLASS__;
+      self::$_people[ $id ] = new $class( $id );
+    }
+    return self::$_people[ $id ];
   }
 
   static function parse ( $file ) {
@@ -47,12 +70,16 @@ class Person {
       }
     }
     fclose( $file );
+    self::$_gedcom = $gedcom;
     return $gedcom;
   }
 
-  function _id ( $data ) {
+  static function _id ( $data ) {
     if ( ! $data ) return null;
-    if ( is_array( $data )) return $this->_id( $data[0] );
+    if ( is_array( $data )) {
+      if ( isset( $data['_ID'] )) return self::_id( $data['_ID'] );
+      if ( isset( $data[0] )) return self::_id( $data[0] );
+    }
     return @preg_replace( '/@/', '', $data );
   }
 
@@ -114,8 +141,8 @@ class Person {
     foreach ( $ids as $id ) {
       $id = $this->_id( $id );
       foreach ( array( '_TYPE', 'TEXT' ) as $tag ) {
-        if ( isset( $this->_gedcom['SOUR'][$id][$tag] )) {
-          foreach ( $this->_gedcom['SOUR'][$id][$tag][$tag] as $source ) {
+        if ( isset( self::$_gedcom['SOUR'][$id][$tag] )) {
+          foreach ( self::$_gedcom['SOUR'][$id][$tag][$tag] as $source ) {
             array_push( $sources, $source );
           }
         }
@@ -129,7 +156,7 @@ class Person {
     $notes = array( );
     foreach ( $this->_data['NOTE']['NOTE'] as $id ) {
       $id = $this->_id( $id );
-      foreach ( $this->_gedcom['NOTE'][$id]['CONC']['CONC'] as $note ) {
+      foreach ( self::$_gedcom['NOTE'][$id]['CONC']['CONC'] as $note ) {
         array_push( $notes, trim( $note ));
       }
     }
@@ -139,7 +166,7 @@ class Person {
   function familiesWithParents ( ) {
     if ( ! isset( $this->_data['FAMC'] )) return null;
     $familyID = $this->_id( $this->_data['FAMC']['FAMC'][0] );
-    return $this->_gedcom['FAM'][$familyID];
+    return self::$_gedcom['FAM'][$familyID];
   }
 
   function familiesWithSpouse ( ) {
@@ -147,7 +174,7 @@ class Person {
     $families = array( );
     foreach ( $this->_data['FAMS']['FAMS'] as $family ) {
       $familyID = $this->_id( $family );
-      array_push( $families, $this->_gedcom['FAM'][$familyID] );
+      array_push( $families, self::$_gedcom['FAM'][$familyID] );
     }
     return $families;
   }
@@ -156,7 +183,7 @@ class Person {
     if ( ! $this->_mother ) {
       $family = $this->familiesWithParents( );
       $mother = isset( $family['WIFE'] ) ? $family['WIFE']['WIFE'][0] : null;
-      $this->_mother = new Person( $mother, $this->_gedcom );
+      $this->_mother = self::singleton( $mother );
     }
     return $this->_mother;
   }
@@ -165,7 +192,7 @@ class Person {
     if ( ! $this->_father ) {
       $family = $this->familiesWithParents( );
       $father = isset( $family['HUSB'] ) ? $family['HUSB']['HUSB'][0] : null;
-      $this->_father = new Person( $father, $this->_gedcom );
+      $this->_father = self::singleton( $father );
     }
     return $this->_father;
   }
@@ -177,7 +204,7 @@ class Person {
         foreach ( array( 'WIFE', 'HUSB' ) as $tag ) {
           if ( isset( $family[ $tag ] )) {
             foreach ( $family[ $tag ][ $tag ] as $spouse ) {
-              $spouse = new Person( $spouse, $this->_gedcom );
+              $spouse = self::singleton( $spouse );
               if ( $spouse->id( ) != $this->id( )) array_push( $this->_spouses, $spouse );
             }
           }
@@ -193,7 +220,7 @@ class Person {
       $family = $this->familiesWithParents( );
       if ( isset( $family['CHIL'] )) {
         foreach ( $family['CHIL']['CHIL'] as $child ) {
-          $sibling = new Person( $child, $this->_gedcom );
+          $sibling = self::singleton( $child );
           if ( $sibling->id( ) != $this->id( )) array_push( $this->_siblings, $sibling );
         }
       }
@@ -207,7 +234,7 @@ class Person {
       foreach ( $this->familiesWithSpouse( ) as $family ) {
         if ( isset( $family['CHIL'] )) {
           foreach ( $family['CHIL']['CHIL'] as $child ) {
-            array_push( $this->_children, new Person( $child, $this->_gedcom ));
+            array_push( $this->_children, self::singleton( $child ));
           }
         }
       }
@@ -215,10 +242,21 @@ class Person {
     return $this->_children;
   }
 
-  function _year ( $type = 'BIRT' ) {
+  function _year ( $type = 'BIRT', $schema = false ) {
     if ( ! isset( $this->_data[ $type ] )) return '';
     if ( ! isset( $this->_data[ $type ]['DATE'] )) return '';
-    if ( preg_match( '/(\d{4})/', $this->_data[ $type ]['DATE'][0], $match )) {
+    $time = strtotime( $this->_data[ $type ]['DATE'][0] );
+    $date = $time ? date( 'Y-m-d', $time ) : $this->_data[ $type ]['DATE'][0];
+    if ( $date == date( 'Y-m-d' )) $date = $this->_data[ $type ]['DATE'][0];
+    // error_log( __METHOD__ . ' ' . $this->_data[ $type ]['DATE'][0] . ' ' . $time . ' ' . $date );
+    if ( preg_match( '/(\d{4})(-(\d\d)-(\d\d))?/', $date, $match )) {
+      // error_log( __METHOD__ . ' ' . json_encode( $match ));
+      if ( $schema && ( $type == 'BIRT' || $type == 'DEAT' )) {
+        $itemprop = $type == 'BIRT' ? 'birthDate' : 'deathDate';
+        $html = '<span itemprop="' . $itemprop . '" content="' . $date . '">' . $match[1] . '</span>';
+        // error_log( $html );
+        return $html;
+      }
       return $match[1];
     }
     return '';
@@ -236,11 +274,11 @@ class Person {
     return '(' . $this->_date( 'BIRT' ) . ' - ' . $this->_date( 'DEAT' ) . ')';
   }
 
-  function years ( ) {
+  function years ( $schema = false ) {
     $birth = $this->_year( 'BIRT' );
     $death = $this->_year( 'DEAT' );
     if ( ! ( $birth || $death )) return '';
-    return $this->_year( 'BIRT' ) . ' - ' . $this->_year( 'DEAT' );
+    return $this->_year( 'BIRT', $schema ) . ' - ' . $this->_year( 'DEAT', $schema );
   }
 
   function tagToLabel ( $tag ) {
@@ -263,8 +301,10 @@ class Person {
     return implode( ' ', $return );
   }
 
-  function tableTree ( ) {
-    $html = '<table id="family" summary="' . $this->name( ) . ' family tree">';
+  function tableTree ( $schema = false ) {
+    $html = '<table id="family" summary="' . $this->name( ) . ' family tree"';
+    if ( $schema ) $html .= ' itemscope itemtype="http://schema.org/Person"';
+    $html .= '>';
     $children = array_map( function( $child ) { return $child->name( true ); }, $this->children( ));
     $c = count( $children );
     if ( ! $c ) $c = 1;
@@ -317,8 +357,13 @@ class Person {
     $html .= '</td>';
     $html .= '</tr>';
     $html .= '<tr>';
-    $html .= '<td class="self" colspan="' . $c * 8 . '">';
+    $html .= '<td class="self" colspan="' . $c * 8 . '"';
+    if ( $schema ) $html .= ' itemprop="name"';
+    $html .= '>';
     $html .= $this->name( );
+    if ( $schema ) {
+      $html .= ' ' . $this->years( true );
+    }
     $html .= '</td>';
     $html .= '</tr>';
     $html .= '<tr>';
@@ -348,15 +393,36 @@ class Person {
     return $this->isAlive( );
   }
 
-  function ancestors ( ) {
+  /**
+   * Get one "level" of parents, grandparent etc
+   * $this->parentIDs( ); // parents
+   * $this->parentIDs( 2 ); // grandparents
+   * $this->parentIDs( 3 ); // great-grandparents
+   */
+  function parentIDs ( $levelRequired = 1, $thisLevel = 1 ) {
+    $ancestors = array( );
+    foreach ( array( 'father', 'mother' ) as $parent ) {
+      if ( $this->$parent( )->id( )) {
+        if ( $levelRequired == $thisLevel ) {
+          array_push( $ancestors, $this->$parent( )->id( ));
+        }
+        else {
+          $ancestors = array_merge( $ancestors, $this->$parent( )->parentIDs( $levelRequired, $thisLevel + 1 ));
+        }
+      }
+    }
+    return $ancestors;
+  }
+
+  function ancestorIDs ( ) {
     $ancestors = array( );
     if ( $this->father( )->id( )) {
       array_push( $ancestors, $this->father( )->id( ));
-      $ancestors = array_merge( $ancestors, $this->father( )->ancestors( ));
+      $ancestors = array_merge( $ancestors, $this->father( )->ancestorIDs( ));
     }
     if ( $this->mother( )->id( )) {
       array_push( $ancestors, $this->mother( )->id( ));
-      $ancestors = array_merge( $ancestors, $this->mother( )->ancestors( ));
+      $ancestors = array_merge( $ancestors, $this->mother( )->ancestorIDs( ));
     }
     return $ancestors;
   }
@@ -390,11 +456,16 @@ class Person {
     }
   }
 
+  static function ordinal ( $number ) {
+    if (( $number % 100 ) >= 11 && ( $number % 100 ) <= 13 ) return $number . 'th';
+    $ends = array( 'th', 'st', 'nd', 'rd', 'th', 'th', 'th', 'th', 'th', 'th' );
+    return $number . $ends[ $number % 10 ];
+  }
+
   /**
    * Return the relationship between this person and another, brief form
    */
   function _relationship( $person ) {
-    if ( $this->id( ) == $person->id( )) return 'themself';
 
     if ( $this->id( ) == $person->father( )->id( )) return 'father';
     if ( $this->id( ) == $person->mother( )->id( )) return 'mother';
@@ -412,7 +483,7 @@ class Person {
     if ( $this->mother( )->father( )->id( ) == $person->id( )) return 'grandchild';
     if ( $this->mother( )->mother( )->id( ) == $person->id( )) return 'grandchild';
 
-    if ( in_array( $person->id( ), $this->ancestors( ))) {
+    if ( in_array( $person->id( ), $this->ancestorIDs( ))) {
       if ( $level = $this->hasAncestor( $person, 1, $this->id( ) == 389 )) {
         // error_log( $this->name( ) . ' is ' . ( $level - 2 ) . 'x grandchild' );
         if ( $level == 1 ) return 'great grandchild';
@@ -420,16 +491,19 @@ class Person {
       }
       return 'descendent';
     }
-    if ( in_array( $this->id( ), $person->ancestors( ))) {
+    if ( in_array( $this->id( ), $person->ancestorIDs( ))) {
       // error_log( $person->name( ) . ' has ancestor ' . $this->name( ));
       if ( $level = $person->hasAncestor( $this, 1, $this->id( ) == 198 )) {
-        error_log( $this->name( ) . ' is ' . $level . 'x great grandparent' );
         if ( $level == 1 ) return 'great grandparent';
-        return $level . 'x great grandparent (possibly, still working on the logic here)';
+        return $level . 'x great grandparent (hopefully, still working on this)';
       }
       return 'ancestor';
     }
-    if ( array_intersect( $this->ancestors( ), $person->ancestors( ))) return 'related';
+    if ( array_intersect( $this->parentIDs( ), $person->parentIDs( ))) return 'sibling';
+    for ( $i = 2; $i < 6; $i ++ ) {
+      if ( array_intersect( $this->parentIDs( $i ), $person->parentIDs( $i ))) return self::ordinal( $i - 1 ) . ' cousin';
+    }
+    if ( array_intersect( $this->ancestorIDs( ), $person->ancestorIDs( ))) return 'related';
 
     return null;
   }
@@ -440,13 +514,13 @@ class Person {
       $occupation = $this->occupation( );
       if ( $occupation ) array_push( $parts, $occupation );
       foreach ( array( 'BIRT', 'BAPM', 'DEAT', 'BURI' ) as $tag ) {
-        $content = $this->timeAndPlace( $tag );
+        $content = $this->timeAndPlace( $tag, true );
         if ( $content ) array_push( $parts, $content );
       }
       $notes = $this->notes( );
       if ( $notes ) array_push( $parts, $notes );
     }
-    array_push( $parts, '</p>' . $this->tableTree( ) . '<p>' );
+    array_push( $parts, '</p>' . $this->tableTree( ! $this->isPrivate( )) . '<p>' );
     if ( $this->isPrivate( )) {
       array_push( $parts, 'Respecting the privacy of ' . $this->name( ) .' (at least partly!). If you are ' . $this->name( ) . ' and you would like more of your details removed from this site please get in touch. Likewise if you can offer more details of your family tree, please also drop me a line!' );
     }
