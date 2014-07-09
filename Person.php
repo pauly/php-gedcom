@@ -4,6 +4,7 @@ class Person {
 
   public static $_gedcom;
   public static $_people;
+  public static $generationsToName = 10;
   var $_data;
   var $_father;
   var $_mother;
@@ -12,7 +13,6 @@ class Person {
   var $_spouses;
   var $_parents = array( );
   var $_ancestorIDs = null;
-  var $generationsToName = 10;
 
   function __construct ( $id = null, $gedcom = null ) {
     if ( $gedcom === null ) $gedcom = self::$_gedcom;
@@ -104,13 +104,19 @@ class Person {
     return self::i18n( 'child' );
   }
 
+  function grandChildType ( ) {
+    if ( $this->gender( ) == 'M' ) return self::i18n( 'grandson' );
+    if ( $this->gender( ) == 'F' ) return self::i18n( 'granddaughter' );
+    return self::i18n( 'grandchild' );
+  }
+
   function siblingType ( ) {
     if ( $this->gender( ) == 'M' ) return self::i18n( 'brother' );
     if ( $this->gender( ) == 'F' ) return self::i18n( 'sister' );
     return self::i18n( 'sibling' );
   }
 
-  function siblingParentType ( ) {
+  function parentSiblingType ( ) {
     if ( $this->gender( ) == 'M' ) return self::i18n( 'uncle' );
     if ( $this->gender( ) == 'F' ) return self::i18n( 'aunt' );
   }
@@ -124,6 +130,24 @@ class Person {
     if ( $this->gender( ) == 'M' ) return self::i18n( 'father' );
     if ( $this->gender( ) == 'F' ) return self::i18n( 'mother' );
     return self::i18n( 'parent' );
+  }
+
+  function grandParentType ( ) {
+    if ( $this->gender( ) == 'M' ) return self::i18n( 'grandfather' );
+    if ( $this->gender( ) == 'F' ) return self::i18n( 'grandmother' );
+    return self::i18n( 'grandparent' );
+  }
+
+  function greatGrandParentType ( ) {
+    if ( $this->gender( ) == 'M' ) return self::i18n( 'great-grandfather' );
+    if ( $this->gender( ) == 'F' ) return self::i18n( 'great-grandmother' );
+    return self::i18n( 'great-grandparent' );
+  }
+
+  function greatGrandChildType ( ) {
+    if ( $this->gender( ) == 'M' ) return self::i18n( 'great-grandson' );
+    if ( $this->gender( ) == 'F' ) return self::i18n( 'great-granddaughter' );
+    return self::i18n( 'great-grandchild' );
   }
 
   function _urlise ( $name ) {
@@ -316,11 +340,11 @@ class Person {
   }
 
   function tagToLabel ( $tag ) {
-    if ( $tag == 'BIRT' ) return 'Born';
-    if ( $tag == 'BAPM' ) return 'Baptised';
-    if ( $tag == 'DEAT' ) return 'Died';
-    if ( $tag == 'BURI' ) return 'Buried';
-    if ( $tag == 'OCCU' ) return 'Occupation';
+    if ( $tag == 'BIRT' ) return ucfirst( self::i18n( 'born' ));
+    if ( $tag == 'BAPM' ) return ucfirst( self::i18n( 'baptised' ));
+    if ( $tag == 'DEAT' ) return ucfirst( self::i18n( 'died' ));
+    if ( $tag == 'BURI' ) return ucfirst( self::i18n( 'buried' ));
+    if ( $tag == 'OCCU' ) return ucfirst( self::i18n( 'occupation' ));
     return $tag;
   }
 
@@ -514,49 +538,55 @@ class Person {
    */
   function _relationship( $person ) {
 
-    if ( $this->id( ) == $person->father( )->id( )) return 'father';
-    if ( $this->id( ) == $person->mother( )->id( )) return 'mother';
+    foreach ( array( 'father', 'mother' ) as $parent ) {
+      if ( $this->id( ) == $person->$parent( )->id( )) return self::i18n( $parent );
+    }
 
-    if ( $this->id( ) == $person->father( )->father( )->id( )) return 'paternal grandfather';
-    if ( $this->id( ) == $person->father( )->mother( )->id( )) return 'paternal grandmother';
-    if ( $this->id( ) == $person->mother( )->father( )->id( )) return 'maternal grandfather';
-    if ( $this->id( ) == $person->mother( )->mother( )->id( )) return 'maternal grandmother';
+    if ( $this->id( ) == $person->father( )->father( )->id( )) return self::i18n( 'paternal grandfather' );
+    if ( $this->id( ) == $person->father( )->mother( )->id( )) return self::i18n( 'paternal grandmother' );
+    if ( $this->id( ) == $person->mother( )->father( )->id( )) return self::i18n( 'maternal grandfather' );
+    if ( $this->id( ) == $person->mother( )->mother( )->id( )) return self::i18n( 'maternal grandmother' );
 
     if ( $this->father( )->id( ) == $person->id( )) return $this->childType( );
     if ( $this->mother( )->id( ) == $person->id( )) return $this->childType( );
 
-    if ( $this->father( )->father( )->id( ) == $person->id( )) return 'grand' . $this->childType( );
-    if ( $this->father( )->mother( )->id( ) == $person->id( )) return 'grand' . $this->childType( );
-    if ( $this->mother( )->father( )->id( ) == $person->id( )) return 'grand' . $this->childType( );
-    if ( $this->mother( )->mother( )->id( ) == $person->id( )) return 'grand' . $this->childType( );
+    if ( $this->father( )->father( )->id( ) == $person->id( )) return $this->grandChildType( );
+    if ( $this->father( )->mother( )->id( ) == $person->id( )) return $this->grandChildType( );
+    if ( $this->mother( )->father( )->id( ) == $person->id( )) return $this->grandChildType( );
+    if ( $this->mother( )->mother( )->id( ) == $person->id( )) return $this->grandChildType( );
 
     if ( in_array( $person->id( ), $this->ancestorIDs( ))) {
-      if ( $level = $this->hasAncestor( $person, 1 /*, $this->id( ) == 389 */ )) {
-        if ( $level == 1 ) return 'great grand' . $this->childType( ); // @todo i18n
-        return $level . 'x great grand' . $this->childType( ); // @todo i18n
+      if ( $level = $this->hasAncestor( $person, 1 )) {
+        if ( $level == 1 ) return $this->greatGrandChildType( );
+        return $level . 'x ' . $this->greatGrandChildType( );
       }
       return self::i18n( 'descendent' );
     }
     if ( in_array( $this->id( ), $person->ancestorIDs( ))) {
-      // error_log( $person->name( ) . ' has ancestor ' . $this->name( ));
-      if ( $level = $person->hasAncestor( $this, 1 /*, $this->id( ) == 198  */ )) {
-        if ( $level == 1 ) return 'great grand' . $this->parentType( );
-        return self::commodore( $level ) . ' great grand' . $this->parentType( );
+      if ( $level = $person->hasAncestor( $this, 1 )) {
+        if ( $level == 1 ) return $this->greatGrandParentType( );
+        return $level . 'x ' . $this->greatGrandParentType( );
       }
       return self::i18n( 'ancestor' );
     }
     if ( array_intersect( $this->parentIDs( ), $person->parentIDs( ))) return $this->siblingType( );
-    for ( $i = 2; $i < 10; $i ++ ) {
+    for ( $i = 2; $i < self::$generationsToName; $i ++ ) {
       if ( array_intersect( $this->parentIDs( $i ), $person->parentIDs( $i ))) return self::ordinal( $i - 1 ) . ' ' . self::i18n( 'cousin' );
     }
 
     if ( array_intersect( $this->parentIDs( 2 ), $person->parentIDs( ))) return $this->siblingChildType( );
-    if ( array_intersect( $this->parentIDs( ), $person->parentIDs( 2 ))) return $this->siblingParentType( );
+    /* for ( $i = 3; $i < self::$generationsToName; $i ++ ) {
+      if ( array_intersect( $this->parentIDs( $i ), $person->parentIDs( ))) return ( $i - 3 ) . 'x ' self::i18n( 'great' ) . ' ' . $this->siblingChildType( );
+    } */
+    if ( array_intersect( $this->parentIDs( ), $person->parentIDs( 2 ))) return $this->parentSiblingType( );
+    /* for ( $i = 3; $i < self::$generationsToName; $i ++ ) {
+      if ( array_intersect( $this->parentIDs( $i ), $person->parentIDs( ))) return ( $i - 3 ) . 'x ' . self::i18n( 'great' ) . ' ' . $this->parentSiblingType( );
+    } */
 
-    for ( $i = 2; $i < 10; $i ++ ) {
-      for ( $j = 2; $j < 10; $j ++ ) {
+    for ( $i = 2; $i < self::$generationsToName; $i ++ ) {
+      for ( $j = 2; $j < self::$generationsToName; $j ++ ) {
         if ( $i == $j ) continue; // already tested this
-        if ( array_intersect( $this->parentIDs( $i ), $person->parentIDs( $j ))) return self::ordinal( $i - 1 ) . ' ' . self::i18n( 'cousin ' ) . ' ' . self::commodore( abs( $i - $j )) . ' ' . self::i18n( 'removed' ) . '?';
+        if ( array_intersect( $this->parentIDs( $i ), $person->parentIDs( $j ))) return self::ordinal( $i - 1 ) . ' ' . self::i18n( 'cousin' ) . ' ' . self::commodore( abs( $i - $j )) . ' ' . self::i18n( 'removed' ) . '?';
       }
     }
     if ( array_intersect( $this->ancestorIDs( ), $person->ancestorIDs( ))) return self::i18n( 'related' );
@@ -576,17 +606,17 @@ class Person {
       $notes = $this->notes( );
       if ( $notes ) array_push( $parts, $notes );
     }
-    array_push( $parts, '</p>' . $this->tableTree( ! $this->isPrivate( )) . '<p>' );
+    array_push( $parts, '</p>' . $this->tableTree( ! $this->isPrivate( )) . '<p>' ); // @todo dreadful html
     if ( $this->isPrivate( )) {
-      array_push( $parts, 'Respecting the privacy of ' . $this->name( ) .' (at least partly!). If you are ' . $this->name( ) . ' and you would like more of your details removed from this site please get in touch. Likewise if you can offer more details of your family tree, please also drop me a line!' );
+      array_push( $parts, 'Respecting the privacy of ' . $this->name( ) .' (at least partly!). If you are ' . $this->name( ) . ' and you would like more of your details removed from this site please get in touch. Likewise if you can offer more details of your family tree, please also drop me a line!' ); // @todo i18n
     }
-    array_push( $parts, 'Father: ' . $this->father( )->name( false, ! $this->father( )->isPrivate( )));
-    array_push( $parts, 'Mother ' . $this->mother( )->name( false, ! $this->mother( )->isPrivate( )));
+    array_push( $parts, ucfirst( self::i18n( 'father' )) . ' ' . $this->father( )->name( false, ! $this->father( )->isPrivate( )));
+    array_push( $parts, ucfirst( self::i18n( 'mother' )) . ' ' . $this->mother( )->name( false, ! $this->mother( )->isPrivate( )));
     foreach ( $this->spouses( ) as $spouse ) {
-      array_push( $parts, 'Spouse: ' . $spouse->name( true ));
+      array_push( $parts, ucfirst( self::i18n( 'spouse' )) . ' ' . $spouse->name( true ));
     }
     $siblings = array_map( function( $sibling ) { return $sibling->name( true ); }, $this->siblings( ));
-    if ( count( $siblings )) array_push( $parts, 'Siblings: ' . implode( ', ', $siblings ));
+    if ( count( $siblings )) array_push( $parts, ucfirst( self::i18n( 'siblings' )) . ': ' . implode( ', ', $siblings ));
     return implode( "\n\n", $parts );
   }
 
