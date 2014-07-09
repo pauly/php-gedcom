@@ -12,6 +12,7 @@ class Person {
   var $_spouses;
   var $_parents = array( );
   var $_ancestorIDs = null;
+  var $generationsToName = 10;
 
   function __construct ( $id = null, $gedcom = null ) {
     if ( $gedcom === null ) $gedcom = self::$_gedcom;
@@ -90,6 +91,39 @@ class Person {
 
   function id ( ) {
     return substr( $this->_data['_ID'], 1 );
+  }
+
+  function gender ( ) {
+    if ( ! isset( $this->_data['SEX'] )) return null;
+    return $this->_data['SEX']['SEX'][0];
+  }
+
+  function childType ( ) {
+    if ( $this->gender( ) == 'M' ) return self::i18n( 'son' );
+    if ( $this->gender( ) == 'F' ) return self::i18n( 'daughter' );
+    return self::i18n( 'child' );
+  }
+
+  function siblingType ( ) {
+    if ( $this->gender( ) == 'M' ) return self::i18n( 'brother' );
+    if ( $this->gender( ) == 'F' ) return self::i18n( 'sister' );
+    return self::i18n( 'sibling' );
+  }
+
+  function siblingParentType ( ) {
+    if ( $this->gender( ) == 'M' ) return self::i18n( 'uncle' );
+    if ( $this->gender( ) == 'F' ) return self::i18n( 'aunt' );
+  }
+
+  function siblingChildType ( ) {
+    if ( $this->gender( ) == 'M' ) return self::i18n( 'nephew' );
+    if ( $this->gender( ) == 'F' ) return self::i18n( 'niece' );
+  }
+
+  function parentType ( ) {
+    if ( $this->gender( ) == 'M' ) return self::i18n( 'father' );
+    if ( $this->gender( ) == 'F' ) return self::i18n( 'mother' );
+    return self::i18n( 'parent' );
   }
 
   function _urlise ( $name ) {
@@ -456,6 +490,19 @@ class Person {
     }
   }
 
+  /**
+   * @todo
+   */
+  static function i18n ( $string ) {
+    return $string;
+  }
+
+  static function commodore ( $number ) {
+    if ( $number == 1 ) return self::i18n( 'once' );
+    if ( $number == 2 ) return self::i18n( 'twice' );
+    return $number . ' ' . self::i18n( 'times' );
+  }
+
   static function ordinal ( $number ) {
     if (( $number % 100 ) >= 11 && ( $number % 100 ) <= 13 ) return $number . 'th';
     $ends = array( 'th', 'st', 'nd', 'rd', 'th', 'th', 'th', 'th', 'th', 'th' );
@@ -475,35 +522,44 @@ class Person {
     if ( $this->id( ) == $person->mother( )->father( )->id( )) return 'maternal grandfather';
     if ( $this->id( ) == $person->mother( )->mother( )->id( )) return 'maternal grandmother';
 
-    if ( $this->father( )->id( ) == $person->id( )) return 'child';
-    if ( $this->mother( )->id( ) == $person->id( )) return 'child';
+    if ( $this->father( )->id( ) == $person->id( )) return $this->childType( );
+    if ( $this->mother( )->id( ) == $person->id( )) return $this->childType( );
 
-    if ( $this->father( )->father( )->id( ) == $person->id( )) return 'grandchild';
-    if ( $this->father( )->mother( )->id( ) == $person->id( )) return 'grandchild';
-    if ( $this->mother( )->father( )->id( ) == $person->id( )) return 'grandchild';
-    if ( $this->mother( )->mother( )->id( ) == $person->id( )) return 'grandchild';
+    if ( $this->father( )->father( )->id( ) == $person->id( )) return 'grand' . $this->childType( );
+    if ( $this->father( )->mother( )->id( ) == $person->id( )) return 'grand' . $this->childType( );
+    if ( $this->mother( )->father( )->id( ) == $person->id( )) return 'grand' . $this->childType( );
+    if ( $this->mother( )->mother( )->id( ) == $person->id( )) return 'grand' . $this->childType( );
 
     if ( in_array( $person->id( ), $this->ancestorIDs( ))) {
-      if ( $level = $this->hasAncestor( $person, 1, $this->id( ) == 389 )) {
-        // error_log( $this->name( ) . ' is ' . ( $level - 2 ) . 'x grandchild' );
-        if ( $level == 1 ) return 'great grandchild';
-        return $level . 'x great grandchild';
+      if ( $level = $this->hasAncestor( $person, 1 /*, $this->id( ) == 389 */ )) {
+        if ( $level == 1 ) return 'great grand' . $this->childType( ); // @todo i18n
+        return $level . 'x great grand' . $this->childType( ); // @todo i18n
       }
-      return 'descendent';
+      return self::i18n( 'descendent' );
     }
     if ( in_array( $this->id( ), $person->ancestorIDs( ))) {
       // error_log( $person->name( ) . ' has ancestor ' . $this->name( ));
-      if ( $level = $person->hasAncestor( $this, 1, $this->id( ) == 198 )) {
-        if ( $level == 1 ) return 'great grandparent';
-        return $level . 'x great grandparent (hopefully, still working on this)';
+      if ( $level = $person->hasAncestor( $this, 1 /*, $this->id( ) == 198  */ )) {
+        if ( $level == 1 ) return 'great grand' . $this->parentType( );
+        return self::commodore( $level ) . ' great grand' . $this->parentType( );
       }
-      return 'ancestor';
+      return self::i18n( 'ancestor' );
     }
-    if ( array_intersect( $this->parentIDs( ), $person->parentIDs( ))) return 'sibling';
-    for ( $i = 2; $i < 6; $i ++ ) {
-      if ( array_intersect( $this->parentIDs( $i ), $person->parentIDs( $i ))) return self::ordinal( $i - 1 ) . ' cousin';
+    if ( array_intersect( $this->parentIDs( ), $person->parentIDs( ))) return $this->siblingType( );
+    for ( $i = 2; $i < 10; $i ++ ) {
+      if ( array_intersect( $this->parentIDs( $i ), $person->parentIDs( $i ))) return self::ordinal( $i - 1 ) . ' ' . self::i18n( 'cousin' );
     }
-    if ( array_intersect( $this->ancestorIDs( ), $person->ancestorIDs( ))) return 'related';
+
+    if ( array_intersect( $this->parentIDs( 2 ), $person->parentIDs( ))) return $this->siblingChildType( );
+    if ( array_intersect( $this->parentIDs( ), $person->parentIDs( 2 ))) return $this->siblingParentType( );
+
+    for ( $i = 2; $i < 10; $i ++ ) {
+      for ( $j = 2; $j < 10; $j ++ ) {
+        if ( $i == $j ) continue; // already tested this
+        if ( array_intersect( $this->parentIDs( $i ), $person->parentIDs( $j ))) return self::ordinal( $i - 1 ) . ' ' . self::i18n( 'cousin ' ) . ' ' . self::commodore( abs( $i - $j )) . ' ' . self::i18n( 'removed' ) . '?';
+      }
+    }
+    if ( array_intersect( $this->ancestorIDs( ), $person->ancestorIDs( ))) return self::i18n( 'related' );
 
     return null;
   }
