@@ -151,8 +151,8 @@ class Person {
   }
 
   function _urlise ( $name ) {
-    $find = array( '/\s+/', '/[^\w\'+()-]/' );
-    $replace = array( '+', '' );
+    $find = array( '/\s+/', '/[^\w\'+()-]/', '/\'/' );
+    $replace = array( '+', '', '%27' );
     return strtolower( preg_replace( $find, $replace, trim( $name )));
   }
 
