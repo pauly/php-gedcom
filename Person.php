@@ -209,6 +209,25 @@ class Person {
     return implode( ', ', $sources );
   }
 
+  function note ( $ids = array( )) {
+    $notes = array( );
+    foreach ( $ids as $id ) {
+      if ( $id = $this->_id( $id )) {
+        foreach ( array( 'CONC' ) as $tag ) {
+          if ( isset( self::$_gedcom['NOTE'][$id][$tag] )) {
+            foreach ( self::$_gedcom['NOTE'][$id][$tag][$tag] as $note ) {
+              array_push( $notes, $note );
+            }
+          }
+          else {
+            array_push( $notes, $id );
+          }
+        }
+      }
+    }
+    return implode( ', ', $notes );
+  }
+
   function notes ( ) {
     if ( ! isset( $this->_data['NOTE'] )) return null;
     $notes = array( );
@@ -354,7 +373,8 @@ class Person {
     $return = array( ucfirst( $label ));
     if ( isset( $this->_data[ $tag ]['DATE'] )) array_push( $return, $this->_data[ $tag ]['DATE'][0] );
     if ( isset( $this->_data[ $tag ]['PLAC'] )) array_push( $return, $this->_data[ $tag ]['PLAC'][0] );
-    if ( isset( $this->_data[ $tag ]['NOTE'] )) array_push( $return, '(' . $this->_data[ $tag ]['NOTE'][0] . ')' );
+    // if ( isset( $this->_data[ $tag ]['NOTE'] )) array_push( $return, '(' . $this->_data[ $tag ]['NOTE'][0] . ')' );
+    if ( isset( $this->_data[ $tag ]['NOTE'] )) array_push( $return, '(' . $this->note( $this->_data[ $tag ]['NOTE'] ) . ')' );
     if ( isset( $this->_data[ $tag ]['SOUR'] )) array_push( $return, '(source: ' . $this->source( $this->_data[ $tag ]['SOUR'] ) . ')' );
     return implode( ' ', $return );
   }
