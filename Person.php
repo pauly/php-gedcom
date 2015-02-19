@@ -225,7 +225,7 @@ class Person {
         }
       }
     }
-    return implode( ', ', $notes );
+    return implode( '', $notes );
   }
 
   function notes ( ) {
@@ -233,11 +233,23 @@ class Person {
     $notes = array( );
     foreach ( $this->_data['NOTE']['NOTE'] as $id ) {
       $id = $this->_id( $id );
-      foreach ( self::$_gedcom['NOTE'][$id]['CONC']['CONC'] as $note ) {
-        array_push( $notes, trim( $note ));
+      if ( isset( self::$_gedcom['NOTE'][$id]['CONC'] )) {
+        foreach ( self::$_gedcom['NOTE'][$id]['CONC']['CONC'] as $note ) {
+          array_push( $notes, trim( $note ));
+        }
+      }
+      else {
+        error_log( 'hmm no CONC in ' . json_encode( self::$_gedcom['NOTE'][$id] ));
       }
     }
     return implode( '', $notes );
+  }
+
+  function will ( ) {
+    $year = $this->_year( 'DEAT' );
+    if ( ! $year ) return;
+    if ( $year < 1858 ) return;
+    return '<a href="https://probatesearch.service.gov.uk/Calendar?surname=' . $this->_urlise( $this->surname( )) . '&yearOfDeath=' . $year . '&page=1#calendar">' . $this->name( ) . '\'s will</a>';
   }
 
   function familiesWithParents ( ) {
@@ -444,9 +456,11 @@ class Person {
     }
     $html .= '</td>';
     $html .= '</tr>';
-    $html .= '<tr>';
-    $html .= implode( array_map( function( $child ) { return '<td colspan="8">' . $child->name( true ) . '</td>'; }, $this->children( )));
-    $html .= '</tr>';
+    if ( ! $this->isPrivate( )) {
+      $html .= '<tr>';
+      $html .= implode( array_map( function( $child ) { return '<td colspan="8">' . $child->name( true ) . '</td>'; }, $this->children( )));
+      $html .= '</tr>';
+    }
     $html .= '</table>';
     return $html;
   }
@@ -468,6 +482,7 @@ class Person {
   }
 
   function isPrivate ( ) {
+    if ( $this->id( ) === 7 ) return true;
     return $this->isAlive( );
   }
 
@@ -508,15 +523,16 @@ class Person {
   function hasAncestor ( $person, $level = 1, $debug = false ) {
     // if ( $debug ) error_log( __METHOD__ . ' ' . $person->name( ) . ' / ' . $this->name( ));
     foreach ( array( 'father', 'mother' ) as $parent ) {
-      // if ( $debug ) error_log( __METHOD__ . ' ' . $this->name( ) . '\'s ' . $parent . ' is / ' . $this->$parent( )->name( ));
+      if ( $debug ) error_log( __METHOD__ . ' ' . $this->name( ) . '\'s ' . $parent . ' is ' . $this->$parent( )->name( ));
       if ( $this->$parent( )->id( )) {
-        if ( $debug ) error_log( __METHOD__ . ' ' . $person->id( ) . ' == ' . $this->$parent( )->id( ) . '?' );
+        // if ( $debug ) error_log( __METHOD__ . ' ' . $person->id( ) . ' == ' . $this->$parent( )->id( ) . '? (for a ' . $level . ')' );
         if ( $person->id( ) == $this->$parent( )->id( )) {
           return $level;
         }
-        if ( $debug ) error_log( __METHOD__ . ', no so test ancestors of ' . $parent );
-        if ( $level = $this->$parent( )->hasAncestor( $person, $level + 1, $debug )) {
-          return $level;
+        // if ( $debug ) error_log( __METHOD__ . ', no so test ancestors of ' . $parent );
+        if ( $newLevel = $this->$parent( )->hasAncestor( $person, $level + 1, $debug )) {
+          // if ( $debug ) error_log( __METHOD__ . ' got a ' . $newLevel );
+          return $newLevel;
         }
       }
     }
@@ -558,6 +574,8 @@ class Person {
    */
   function _relationship( $person ) {
 
+    if ( $this->id( ) === $person->id( )) return;
+
     foreach ( array( 'father', 'mother' ) as $parent ) {
       if ( $this->id( ) == $person->$parent( )->id( )) return self::i18n( $parent );
     }
@@ -577,19 +595,21 @@ class Person {
 
     if ( in_array( $person->id( ), $this->ancestorIDs( ))) {
       if ( $level = $this->hasAncestor( $person, 1 )) {
-        if ( $level == 1 ) return $this->greatGrandChildType( );
-        return $level . 'x ' . $this->greatGrandChildType( );
+        if ( $level == 3 ) return $this->greatGrandChildType( );
+        return ( $level - 2 ) . 'x ' . $this->greatGrandChildType( );
       }
       return self::i18n( 'descendent' );
     }
     if ( in_array( $this->id( ), $person->ancestorIDs( ))) {
       if ( $level = $person->hasAncestor( $this, 1 )) {
-        if ( $level == 1 ) return $this->greatGrandParentType( );
-        return $level . 'x ' . $this->greatGrandParentType( );
+        if ( $level == 3 ) return $this->greatGrandParentType( );
+        return ( $level  - 2 ) . 'x ' . $this->greatGrandParentType( );
       }
       return self::i18n( 'ancestor' );
     }
-    if ( array_intersect( $this->parentIDs( ), $person->parentIDs( ))) return $this->siblingType( );
+    if ( array_intersect( $this->parentIDs( ), $person->parentIDs( ))) {
+      return $this->siblingType( );
+    }
     for ( $i = 2; $i < self::$generationsToName; $i ++ ) {
       if ( array_intersect( $this->parentIDs( $i ), $person->parentIDs( $i ))) return self::ordinal( $i - 1 ) . ' ' . self::i18n( 'cousin' );
     }
@@ -625,6 +645,9 @@ class Person {
       }
       $notes = $this->notes( );
       if ( $notes ) array_push( $parts, $notes );
+      $will = $this->will( );
+      if ( $will ) array_push( $parts, $will );
+      if ( isset( $this->_data['SOUR'] )) array_push( $parts, 'Source: ' . $this->source( $this->_data['SOUR'] ));
     }
     array_push( $parts, '</p>' . $this->tableTree( ! $this->isPrivate( )) . '<p>' ); // @todo dreadful html
     if ( $this->isPrivate( )) {
@@ -632,11 +655,15 @@ class Person {
     }
     array_push( $parts, ucfirst( self::i18n( 'father' )) . ' ' . $this->father( )->name( false, ! $this->father( )->isPrivate( )));
     array_push( $parts, ucfirst( self::i18n( 'mother' )) . ' ' . $this->mother( )->name( false, ! $this->mother( )->isPrivate( )));
-    foreach ( $this->spouses( ) as $spouse ) {
-      array_push( $parts, ucfirst( self::i18n( 'spouse' )) . ' ' . $spouse->name( true ));
+    if ( ! $this->isPrivate( )) {
+      foreach ( $this->spouses( ) as $spouse ) {
+        array_push( $parts, ucfirst( self::i18n( 'spouse' )) . ' ' . $spouse->name( true ));
+      }
     }
-    $siblings = array_map( function( $sibling ) { return $sibling->name( true ); }, $this->siblings( ));
-    if ( count( $siblings )) array_push( $parts, ucfirst( self::i18n( 'siblings' )) . ': ' . implode( ', ', $siblings ));
+    if ( ! $this->isPrivate( )) {
+      $siblings = array_map( function( $sibling ) { return $sibling->name( true ); }, $this->siblings( ));
+      if ( count( $siblings )) array_push( $parts, ucfirst( self::i18n( 'siblings' )) . ': ' . implode( ', ', $siblings ));
+    }
     return implode( "\n\n", $parts );
   }
 
