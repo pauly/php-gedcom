@@ -178,6 +178,7 @@ class Person {
   }
 
   function name ( $link = false, $years = false ) {
+    if ( $this->isPrivate( )) return '[PRIVATE]';
     return $this->_partOfName( 'NAME', $link, $years );
   }
 
@@ -191,18 +192,24 @@ class Person {
 
   function occupation ( ) {
     if ( ! isset( $this->_data['OCCU'] )) return null;
-    return $this->tagToLabel( 'OCCU' ) . ' ' . implode( $this->_data['OCCU']['OCCU'] );
+    return $this->tagToLabel( 'OCCU' ) . ' ' . implode( ', ', array_unique( $this->_data['OCCU']['OCCU'] ));
   }
 
   function source ( $ids = array( )) {
     $sources = array( );
     foreach ( $ids as $id ) {
       $id = $this->_id( $id );
+      if ( ! isset( self::$_gedcom['SOUR'][$id] )) continue;
       foreach ( array( '_TYPE', 'TEXT' ) as $tag ) {
         if ( isset( self::$_gedcom['SOUR'][$id][$tag] )) {
-          foreach ( self::$_gedcom['SOUR'][$id][$tag][$tag] as $source ) {
-            array_push( $sources, $source );
+          $source = '';
+          if ( isset( self::$_gedcom['SOUR'][$id][$tag][$tag] )) {
+            $source .= implode( '', self::$_gedcom['SOUR'][$id][$tag][$tag] );
           }
+          if ( isset( self::$_gedcom['SOUR'][$id][$tag]['CONC'] )) {
+            $source .= implode( '', self::$_gedcom['SOUR'][$id][$tag]['CONC'] );
+          }
+          array_push( $sources, $source );
         }
       }
     }
@@ -233,16 +240,30 @@ class Person {
     $notes = array( );
     foreach ( $this->_data['NOTE']['NOTE'] as $id ) {
       $id = $this->_id( $id );
-      if ( isset( self::$_gedcom['NOTE'][$id]['CONC'] )) {
-        foreach ( self::$_gedcom['NOTE'][$id]['CONC']['CONC'] as $note ) {
-          array_push( $notes, trim( $note ));
+      if ( isset( self::$_gedcom['NOTE'][$id]['CONT'] )) {
+        $text = '';
+        foreach ( self::$_gedcom['NOTE'][$id]['CONT']['CONT'] as $key => $note ) {
+          $text .= '<br /> ' . $note;
+          if ( isset( self::$_gedcom['NOTE'][$id]['CONC'] )) {
+            if ( isset( self::$_gedcom['NOTE'][$id]['CONC']['CONC'] )) {
+              if ( isset( self::$_gedcom['NOTE'][$id]['CONC']['CONC'][$key] )) {
+                $text .= self::$_gedcom['NOTE'][$id]['CONC']['CONC'][$key];
+              }
+            }
+          }
         }
+        array_push( $notes, $text );
       }
       else {
-        error_log( 'hmm no CONC in ' . json_encode( self::$_gedcom['NOTE'][$id] ));
+        if ( isset( self::$_gedcom['NOTE'][$id]['CONC'] )) {
+          array_push( $notes, implode( ',', self::$_gedcom['NOTE'][$id]['CONC']['CONC'] ));
+        }
+        else {
+          error_log( 'hmm no CONT or CONC in ' . json_encode( self::$_gedcom['NOTE'][$id] ));
+        }
       }
     }
-    return implode( '', $notes );
+    return implode( '<br />', $notes );
   }
 
   function will ( ) {
@@ -482,7 +503,10 @@ class Person {
   }
 
   function isPrivate ( ) {
-    if ( $this->id( ) === 7 ) return true;
+    if ( ! $this->id( )) return false;
+    if ( $this->id( ) == 1 ) return false; // show dad
+    if ( $this->id( ) == 7 ) return false; // show me
+    if ( $this->id( ) == 157 ) return false; // show clare
     return $this->isAlive( );
   }
 
@@ -626,7 +650,7 @@ class Person {
     for ( $i = 2; $i < self::$generationsToName; $i ++ ) {
       for ( $j = 2; $j < self::$generationsToName; $j ++ ) {
         if ( $i == $j ) continue; // already tested this
-        if ( array_intersect( $this->parentIDs( $i ), $person->parentIDs( $j ))) return self::ordinal( $i - 1 ) . ' ' . self::i18n( 'cousin' ) . ' ' . self::commodore( abs( $i - $j )) . ' ' . self::i18n( 'removed' ) . '?';
+        if ( array_intersect( $this->parentIDs( $i ), $person->parentIDs( $j ))) return self::ordinal( $i - 1 ) . ' ' . self::i18n( 'cousin' ) . ' ' . self::commodore( abs( $i - $j )) . ' ' . self::i18n( 'removed' );
       }
     }
     if ( array_intersect( $this->ancestorIDs( ), $person->ancestorIDs( ))) return self::i18n( 'related' );
@@ -647,9 +671,9 @@ class Person {
       if ( $notes ) array_push( $parts, $notes );
       $will = $this->will( );
       if ( $will ) array_push( $parts, $will );
-      if ( isset( $this->_data['SOUR'] )) array_push( $parts, 'Source: ' . $this->source( $this->_data['SOUR'] ));
     }
     array_push( $parts, '</p>' . $this->tableTree( ! $this->isPrivate( )) . '<p>' ); // @todo dreadful html
+    if ( isset( $this->_data['SOUR'] )) array_push( $parts, 'Source: ' . $this->source( $this->_data['SOUR'] ));
     if ( $this->isPrivate( )) {
       array_push( $parts, 'Respecting the privacy of ' . $this->name( ) .' (at least partly!). If you are ' . $this->name( ) . ' and you would like more of your details removed from this site please get in touch. Likewise if you can offer more details of your family tree, please also drop me a line!' ); // @todo i18n
     }
