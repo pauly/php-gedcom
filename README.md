@@ -9,13 +9,15 @@ It's not perfect, pull requests appreciated. Every object carries a copy of the 
 
 Usage:
 
+```
 require_once 'Person.php';
-$gedcom = Person::parse( './my-tree.ged' );
+$gedcom = Person::parse('./my-tree.ged');
 
-foreach ( $gedcom['INDI'] as $person ) {
-  $person = new Person( $person, $gedcom );
-  echo $person->surname( ) . ', ' . $person->forename( ) . ' ' . $person->years( ) . "\n";
-  echo $person->link( ) . "\n";
-  // echo $person->name( ) . ' father is ' . $person->father->( )->name( );
-  // echo $person->name( ) . ' maternal grandfather is ' . $gedcom['INDI']['I1']->mother->( )->father( )->name( );
+foreach ($gedcom['INDI'] as $person) {
+  $person = new Person($person, $gedcom);
+  echo $person->surname() . ', ' . $person->forename() . ' ' . $person->years() . "\n";
+  echo $person->link() . "\n";
+  // echo $person->name() . ' father is ' . $person->father->()->name();
+  // echo $person->name() . ' maternal grandfather is ' . $gedcom['INDI']['I1']->mother->()->father()->name();
 }
+```
